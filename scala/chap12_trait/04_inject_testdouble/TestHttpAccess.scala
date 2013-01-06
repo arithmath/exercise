@@ -28,9 +28,9 @@ class TestHttpAccess extends FunSuite{
         assert(sut.history(1) == "httpアクセス終了 url[http://localhost]")
     }
 
-    test("ログの内容をテスト - テスト用無名トレイトを組み込み"){
+    test("ログの内容をテスト - テスト用無名クラスでトレイトのメソッドを上書き"){
         // テスト用ロガーをミックスインしてテスト対象オブジェクトを生成
-        val sut = new HttpAccess("testtest.txt") with Loggable{
+        val sut = new HttpAccess("testtest.txt"){ // with Loggableはあってもなくても良い
             val history : ArrayBuffer[String] = new ArrayBuffer()
 
             override def log(message : String) = {
