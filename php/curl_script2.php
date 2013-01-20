@@ -1,8 +1,11 @@
 <?php
 require_once 'Curl.php';
-$curl = new Curl('http://localhost/darima/wait.php?sec=4', 5);
-$curl2 = new Curl('http://localhost/darima/wait.php?sec=4', 5);
-
-$result = Curl::getBodies(array($curl, $curl2), 60);
-var_dump($result);
+$curl = new Curl('http://localhost/darima/wait.php?sec=10', 2);
+for($i = 0; $i < 3; $i++){
+    try{
+        var_dump($curl->getBody(3));
+    }catch(Exception $e){
+        var_dump($e);
+    }
+}
 ?>
