@@ -29,8 +29,9 @@ $str = 'no6';
 $echoNormal = function($body) use($str){echo "success. [{$str}] [{$body}]\n";};
 $tasks[] = new Task('http://localhost/darima/wait.php?sec=3', 5, $echoNormal);
 
-$executor = new ParallelTaskExecutor($tasks, 3);
-$res = $executor->execute();
+$executor = new ParallelTaskExecutor(3);
+$executor->enableLog();
+$res = $executor->execute($tasks);
 echo "--------------\n";
 //var_dump($res);
 ?>

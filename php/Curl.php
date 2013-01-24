@@ -40,7 +40,7 @@ class Curl{
         return(array($curlCode, $runningCount));
     }
 
-    public function getBody($timeout = 60){
+    public function getBody($suspendTime = 60){
         if($this->isDone){
             return($this->body);
         }
@@ -65,7 +65,7 @@ class Curl{
             // 完了していない場合の処理
             $currentTime = new DateTime('now', new DateTimeZone('Asia/Tokyo'));
             $diff = $currentTime->diff($startTime);
-            if(intval($diff->format('%s')) >= intval($timeout)){
+            if(intval($diff->format('%s')) >= intval($suspendTime)){
                 throw new SuspendException('タイムアウト');
             }
             usleep(1);
@@ -205,15 +205,12 @@ class TaskResult{
 class ParallelTaskExecutor{
     private static $defaultLogFunction = null;
     private static $noLogFunction = null;
-    public $tasks;
     public $executingTasks;
     public $parallelNum;
     public $result;
     public $logFunction;
 
-    public function __construct(array $tasks, $parallelNum = 10){
-        array_map(function($task){if(!is_a($task, 'Task')){throw new InvalidArgumentException();}}, $tasks);
-
+    public function __construct($parallelNum = 10){
         if(static::$defaultLogFunction === null){
             static::$defaultLogFunction =
                 function($message){
@@ -225,18 +222,21 @@ class ParallelTaskExecutor{
             static::$noLogFunction = function($message){};
         }
 
-        $this->tasks = $tasks;
         $this->parallelNum = $parallelNum;
         $this->result = array();
         $this->disableLog();
     }
 
-    public function execute(){
+    /**
+     */
+    public function execute(array $tasks){
+        array_map(function($task){if(!is_a($task, 'Task')){throw new InvalidArgumentException();}}, $tasks);
+
         $this->result = array();
         $this->executingTasks = array();
 
         // 1個1個タスクを追加して、parallelNum個たまったらタスクを実行する
-        foreach($this->tasks as $key => $task){
+        foreach($tasks as $key => $task){
             $this->store($key, $task);
         }
 
@@ -251,14 +251,24 @@ class ParallelTaskExecutor{
         return($result);
     }
 
+    /**
+     * ログ出力を有効化させます
+     */
     public function enableLog(Closure $logFunction = null){
         $this->logFunction = ($logFunction === null)?(static::$defaultLogFunction):($logFunction);
     }
 
+    /**
+     * ログ出力を無効化させます
+     */
     public function disableLog(){
         $this->logFunction = static::$noLogFunction;
     }
 
+    /**
+     * $executingTasksにタスクを1つためます。
+     * タスク数がある程度たまると、progressメソッドを実行します。
+     */
     protected function store($key, Task $task){
         $this->log('store. key=['.$key.']');
         $task->execute();
@@ -268,10 +278,13 @@ class ParallelTaskExecutor{
         }
     }
 
+    /**
+     * $executingTasksにためられているタスクを最低1つ完了させます。
+     */
     protected function progress(){
         $this->log(sprintf('progress. count=[%s]', count($this->executingTasks)));
         $progress = false;
-        while($progress === false){
+        while(true){
             foreach($this->executingTasks as $key => $task){
                 $result = $task->execute();
                 if($result === null){
@@ -282,6 +295,7 @@ class ParallelTaskExecutor{
                 $this->result[$key] = $result;
                 $this->log(sprintf('finish task. key=[%s]', $key));
             }
+            if($progress === true) break;
             usleep(1);
         }
     }
@@ -302,6 +316,5 @@ class TimeoutException extends CurlException{
 }
 
 class SuspendException extends Exception{
-
 }
 ?>

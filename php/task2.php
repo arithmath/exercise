@@ -9,8 +9,8 @@ $tasks[] = new Task('http://localhost/darima/wait.php?sec=3', 5, $echoNormal, $e
 $tasks[] = new Task('http://localhost/darima/wait.php?sec=3', 1, $echoNormal, $echoError);
 $tasks[] = new Task('http://localhost/darima/wait.php?sec=3', 5, $echoNormal, $echoError);
 $tasks[] = new Task('http://localhost/darima/wait.php?sec=3', 1, $echoNormal, $echoError);
-$executor = new ParallelTaskExecutor($tasks, 3);
-$res = $executor->execute();
+$executor = new ParallelTaskExecutor(3);
+$res = $executor->execute($tasks);
 echo "--------------\n";
 //var_dump($res);
 ?>
