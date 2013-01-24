@@ -5,6 +5,7 @@ class Curl{
     private $curl;
     private $mh;
     private $isDone;
+    private $isClosed;
     private $errorCode;
     private $errorMessage;
 
@@ -21,6 +22,7 @@ class Curl{
         $this->body = '';
         $this->mh   = curl_multi_init();
         $this->isDone = false;
+        $this->isClosed = false;
         $this->errorCode = null;
         $this->errorMessage = '';
         curl_setopt($this->curl, CURLOPT_RETURNTRANSFER, true);
@@ -89,8 +91,9 @@ class Curl{
     }
 
     private function close(){
-        if($this->isDone === false){
+        if($this->isClosed === false){
             $this->isDone = true;
+            $this->isClosed = true;
             curl_close($this->curl);
             curl_multi_remove_handle($this->mh, $this->curl);
             curl_multi_close($this->mh);
@@ -111,25 +114,25 @@ class Curl{
                 try{
                     return($curl->getBody(0));
                 }catch(SuspendException $e){
-                    return(false);
+                    return(null);
                 }catch(CurlException $e){
-                    return('');
+                    return($e);
                 }
             };
 
         $startTime = new DateTime('now', new DateTimeZone('Asia/Tokyo'));
         while(true){
             $result = array_map($getBody, $curls);
-            if(array_search(false, $result, true) === false){
+            if(array_search(null, $result, true) === false){
                 return($result);
             }
 
-            usleep(1);
             $currentTime = new DateTime('now', new DateTimeZone('Asia/Tokyo'));
             $diff = $currentTime->diff($startTime);
             if(intval($diff->format('%s')) >= intval($timeout)){
                 return($result);
             }
+            usleep(1);
         }
     }
 }
@@ -139,34 +142,47 @@ class Task{
     private $curl;
     private $url;
     private $timeout;
+    private $isDone;
     private $normalAction;
     private $errorAction;
+
     public function __construct($url, $timeout, Closure $normalAction, Closure $errorAction = null)
     {
         if(static::$defaultErrorAction === null){
-            static::$defaultErrorAction = function($exception){};
+            static::$defaultErrorAction = function($exception){return $exception;};
         }
-        $this->curl = null;
-        $this->url = $url;
-        $this->timeout = $timeout;
+        $this->curl         = null;
+        $this->url          = $url;
+        $this->timeout      = $timeout;
+        $this->isDone       = false;
         $this->normalAction = $normalAction;
-        $this->errorAction = ($errorAction === null)?(static::$defaultErrorAction):$errorAction;
+        $this->errorAction  = ($errorAction === null)?(static::$defaultErrorAction):$errorAction;
     }
 
     public function execute($suspendTime = 0){
+        if($this->isDone){
+            throw new Exception('完了したタスクが再度実行されました');
+        }
         if($this->curl === null){
             $this->curl = new Curl($this->url, $this->timeout);
         }
         try{
             $body = $this->curl->getBody($suspendTime);
+            $this->finish();
             $action = $this->normalAction;
             return(new TaskResult(true, $action($body)));
         }catch(SuspendException $e){
             return(null);
         }catch(Exception $e){
+            $this->finish();
             $action = $this->errorAction;
             return(new TaskResult(false, $action($e)));
         }
+    }
+
+    private function finish(){
+        $this->isDone = true;
+        $this->curl = null;
     }
 }
 class TaskResult{
