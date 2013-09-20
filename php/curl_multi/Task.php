@@ -31,10 +31,13 @@ class Task{
             $this->curl = new Curl($this->url, $this->timeout);
         }
         try{
-            $body = $this->curl->getBody($suspendTime);
+            $body = $this->curl->waitToFinish($suspendTime);
+            $statusCode = $this->curl->getStatusCode();
+            $headers = $this->curl->getHeaders();
+            $body = $this->curl->getBody();
             $this->finish();
             $action = $this->normalAction;
-            return(new TaskResult(true, $action($body)));
+            return(new TaskResult(true, $action($statusCode, $headers, $body)));
         }catch(SuspendException $e){
             return(null);
         }catch(Exception $e){

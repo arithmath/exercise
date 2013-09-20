@@ -62,7 +62,7 @@ class Curl{
         return($this->body);
     }
 
-    protected function waitToFinish($suspendTime = 60){
+    public function waitToFinish($suspendTime = 60){
         if($this->isDone){
             return;
         }
