@@ -2,12 +2,14 @@
 class Curl{
     private $url;
     private $body;
+    private $header;
     private $curl;
     private $mh;
     private $isDone;
     private $isClosed;
     private $errorCode;
     private $errorMessage;
+    private $statusCode;
 
     public function __construct($url = '', $timeout = 180){
         if(!is_string($url)){
@@ -27,6 +29,7 @@ class Curl{
         $this->errorMessage = '';
         curl_setopt($this->curl, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($this->curl, CURLOPT_TIMEOUT, $timeout);
+        curl_setopt($this->curl, CURLOPT_HEADER, true);
         curl_multi_add_handle($this->mh, $this->curl);
         $this->multiExec();
     }
@@ -40,9 +43,28 @@ class Curl{
         return(array($curlCode, $runningCount));
     }
 
+    public function getStatusCode($suspendTime = 60){
+        $this->waitToFinish($suspendTime);
+        return $this->statusCode;
+    }
+    public function getHeader($key = '', $suspendTime = 60){
+        $this->waitToFinish($suspendTime);
+        return isset($this->header[$key])?$this->header[$key]:'';
+    }
+
+    public function getHeaders($suspendTime = 60){
+        $this->waitToFinish($suspendTime);
+        return $this->header;
+    }
+
     public function getBody($suspendTime = 60){
+        $this->waitToFinish($suspendTime);
+        return($this->body);
+    }
+
+    protected function waitToFinish($suspendTime = 60){
         if($this->isDone){
-            return($this->body);
+            return;
         }
 
         $startTime = new DateTime('now', new DateTimeZone('Asia/Tokyo'));
@@ -52,9 +74,12 @@ class Curl{
                 $curlErrorCode = $this->getErrorCode();
                 switch($curlErrorCode) {
                     case  0 :
-                        $this->body = curl_multi_getcontent($this->curl);
+                        $response = curl_multi_getcontent($this->curl);
+                        list($header, $body) = $this->splitHeaderAndBody($response);
+                        $this->recognizeHeader($header);
+                        $this->body = $body;
                         $this->close();
-                        return($this->body);
+                        return;
                     case 28 :
                         throw new TimeoutException($this);
                     default :
@@ -69,6 +94,44 @@ class Curl{
                 throw new SuspendException('タイムアウト');
             }
             usleep(1);
+        }
+    }
+
+    protected function splitHeaderAndBody($responseBody){
+        $splitedBody = explode("\r\n\r\n", $responseBody);
+        if(!is_array($splitedBody) || count($splitedBody) === 0){
+            throw new RuntimeException("レスポンスをヘッダとボディに分割するのに失敗");
+        }elseif(count($splitedBody) === 1){
+            echo "[INFO] レスポンスヘッダが空行を0個含んでいました\n";
+            return array($responseBody, "");
+        }elseif(count($splitedBody) === 2){
+            echo "[INFO] レスポンスヘッダが空行を1個含んでいました\n";
+            return array($splitedBody[0], $splitedBody[1]);
+        }else{
+            $header = array_shift($splitedBody);
+            $body = implode("\r\n\r\n", $splitedBody);
+            echo "[INFO] レスポンスヘッダが空行を" . (count($splitedBody)) . "個含んでいました\n";
+            return array($header, $body);
+        }
+    }
+    protected function recognizeHeader($header){
+        $splitedHeader = explode("\r\n", $header);
+        if(!is_array($splitedHeader) || count($splitedHeader) === 0){
+            throw new RuntimeException("ヘッダの解析に失敗しました");
+        }
+
+        // ステータスコードを取得
+        $firstLine = array_shift($splitedHeader);
+        preg_match('/[0-9]{3}/u', $firstLine, $matches);
+        if(count($matches) === 0) throw new RuntimeException("ヘッダの解析に失敗しました");
+
+        $this->statusCode = $matches[0];
+
+        foreach($splitedHeader as $headerLine){
+            preg_match('/^([^\: ]+) *\: *([^ ].*)$/u', $headerLine, $matches);
+            if(count($matches) === 3){
+                $this->header[$matches[1]] = $matches[2];
+            }
         }
     }
 
